@@ -1,0 +1,105 @@
+name: CI/CD Pipeline VidalCasino
+
+on:
+  push:
+    branches:
+      - deploy # El pipeline se dispara con push a esta rama
+
+jobs:
+  # ==========================================
+  # ETAPA 1: CONSTRUIR (BUILD)
+  # ==========================================
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout del código
+      uses: actions/checkout@v3
+
+    - name: Construir imagen Docker local
+      run: |
+        docker build -t casino-backend-temp:latest .
+        
+    - name: Empaquetar imagen en un archivo tar
+      run: docker save casino-backend-temp:latest > backend-image.tar
+
+    - name: Subir artefacto a GitHub
+      uses: actions/upload-artifact@v3
+      with:
+        name: docker-image-artifact
+        path: backend-image.tar
+        retention-days: 1 # Se borra mañana para no gastar espacio
+
+  # ==========================================
+  # ETAPA 2: SUBIR A AWS (PUSH)
+  # ==========================================
+  push:
+    needs: build # Este job espera a que termine el build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Descargar artefacto de la etapa anterior
+      uses: actions/download-artifact@v3
+      with:
+        name: docker-image-artifact
+
+    - name: Cargar imagen en Docker
+      run: docker load < backend-image.tar
+
+    - name: Configurar credenciales de AWS
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Iniciar sesión en Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - name: Etiquetar y subir imagen a ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        docker tag casino-backend-temp:latest $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        docker tag casino-backend-temp:latest $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker tag casino-backend-temp:latest $ECR_REGISTRY/$ECR_REPOSITORY:v1.0.0
+        docker push -a $ECR_REGISTRY/$ECR_REPOSITORY
+
+  # ==========================================
+  # ETAPA 3: DESPLEGAR (DEPLOY)
+  # ==========================================
+  deploy:
+    needs: push # Este job espera a que el push termine con éxito
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout del código
+      uses: actions/checkout@v3
+
+    - name: Configurar credenciales de AWS
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Iniciar sesión en Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - name: Actualizar Kubeconfig
+      env:
+        EKS_CLUSTER: ${{ secrets.EKS_CLUSTER }}
+        AWS_REGION: ${{ secrets.AWS_REGION }}
+      run: aws eks update-kubeconfig --region $AWS_REGION --name $EKS_CLUSTER
+
+    - name: Desplegar en EKS
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        kubectl apply -f k8s/backend.yaml
+        kubectl set image deployment/backend-deployment backend-container=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
