@@ -6,7 +6,7 @@ WORKDIR /app
 
 # 3. Copiar dependencias e instalar (limpio)
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 
 # 4. Copiar el código fuente
 COPY . .
