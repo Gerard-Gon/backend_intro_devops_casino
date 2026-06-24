@@ -23,7 +23,7 @@ jobs:
       run: docker save casino-backend-temp:latest > backend-image.tar
 
     - name: Subir artefacto a GitHub
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4 # ACTUALIZADO A V4
       with:
         name: docker-image-artifact
         path: backend-image.tar
@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Descargar artefacto de la etapa anterior
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4 # ACTUALIZADO A V4
       with:
         name: docker-image-artifact
 
