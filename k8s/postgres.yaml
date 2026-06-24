@@ -27,6 +27,14 @@ spec:
               key: DB_PASSWORD
         - name: POSTGRES_DB
           value: "casino_db"
+        volumeMounts:
+        - name: init-script-volume
+          mountPath: /docker-entrypoint-initdb.d/01-init.sql
+          subPath: 01-init.sql
+      volumes:
+      - name: init-script-volume
+        configMap:
+          name: postgres-init-config
 ---
 apiVersion: v1
 kind: Service
