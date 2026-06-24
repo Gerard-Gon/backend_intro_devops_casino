@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: backend-container
+        # Tu URI exacta de Amazon ECR
+        image: 914091100375.dkr.ecr.us-east-1.amazonaws.com/casino-backend:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: PORT
+          value: "3000"
+        - name: DB_HOST
+          value: "postgres-service" # Conexión interna mágica por DNS
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_USER
+          value: "casino"
+        - name: DB_NAME
+          value: "casino_db"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: casino-secrets
+              key: DB_PASSWORD
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: casino-secrets
+              key: JWT_SECRET
+        resources:
+          requests:
+            cpu: "100m"
+          limits:
+            cpu: "250m"
+        livenessProbe:
+          httpGet:
+            path: /livez
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: casino-backend
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+  - protocol: TCP
+    port: 3000
+    targetPort: 3000
