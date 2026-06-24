@@ -3,7 +3,7 @@ name: CI/CD Pipeline VidalCasino
 on:
   push:
     branches:
-      - deploy # El pipeline se dispara con push a esta rama
+      - deploy 
 
 jobs:
   # ==========================================
