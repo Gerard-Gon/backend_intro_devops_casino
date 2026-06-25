@@ -35,16 +35,3 @@ spec:
       - name: init-script-volume
         configMap:
           name: postgres-init-config
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: postgres-service
-spec:
-  type: ClusterIP
-  selector:
-    app: postgres
-  ports:
-  - protocol: TCP
-    port: 5432
-    targetPort: 5432
