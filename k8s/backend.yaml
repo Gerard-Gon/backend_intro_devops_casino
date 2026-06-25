@@ -16,6 +16,10 @@ spec:
       - name: backend-container
         # Tu URI exacta de Amazon ECR
         image: 914091100375.dkr.ecr.us-east-1.amazonaws.com/casino-backend:latest
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
         ports:
         - containerPort: 3000
         env:
