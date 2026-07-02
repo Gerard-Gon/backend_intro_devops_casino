@@ -23,21 +23,39 @@ jobs:
       run: docker save casino-backend-temp:latest > backend-image.tar
 
     - name: Subir artefacto a GitHub
-      uses: actions/upload-artifact@v4 # ACTUALIZADO A V4
+      uses: actions/upload-artifact@v4
       with:
         name: docker-image-artifact
         path: backend-image.tar
-        retention-days: 1 # Se borra mañana para no gastar espacio
+        retention-days: 1
 
   # ==========================================
-  # ETAPA 2: SUBIR A AWS (PUSH)
+  # ETAPA 2: PRUEBAS (TEST) - ¡NUEVO!
   # ==========================================
-  push:
+  test:
     needs: build # Este job espera a que termine el build
     runs-on: ubuntu-latest
     steps:
+    - name: Checkout del código
+      uses: actions/checkout@v3
+
+    - name: Configurar Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18' # Asegúrate de que coincida con tu versión local
+
+    - name: Instalar dependencias y ejecutar pruebas
+      run: npm ci && npm test
+
+  # ==========================================
+  # ETAPA 3: SUBIR A AWS (PUSH)
+  # ==========================================
+  push:
+    needs: test # ¡CRÍTICO!: Ahora espera a que 'test' termine en verde
+    runs-on: ubuntu-latest
+    steps:
     - name: Descargar artefacto de la etapa anterior
-      uses: actions/download-artifact@v4 # ACTUALIZADO A V4
+      uses: actions/download-artifact@v4
       with:
         name: docker-image-artifact
 
@@ -58,8 +76,8 @@ jobs:
 
     - name: Etiquetar y subir imagen a ECR
       env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        ECR_REGISTRY: 994995081324.dkr.ecr.us-east-1.amazonaws.com
+        ECR_REPOSITORY: casino/backend
         IMAGE_TAG: ${{ github.sha }}
       run: |
         docker tag casino-backend-temp:latest $ECR_REGISTRY/$ECR_REPOSITORY:latest
@@ -68,7 +86,7 @@ jobs:
         docker push -a $ECR_REGISTRY/$ECR_REPOSITORY
 
   # ==========================================
-  # ETAPA 3: DESPLEGAR (DEPLOY)
+  # ETAPA 4: DESPLEGAR (DEPLOY)
   # ==========================================
   deploy:
     needs: push # Este job espera a que el push termine con éxito
@@ -97,9 +115,9 @@ jobs:
 
     - name: Desplegar en EKS
       env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        ECR_REGISTRY: 994995081324.dkr.ecr.us-east-1.amazonaws.com
+        ECR_REPOSITORY: casino/backend
         IMAGE_TAG: ${{ github.sha }}
       run: |
-        kubectl apply -f k8s/backend.yaml
+        kubectl apply -f k8s/
         kubectl set image deployment/backend-deployment backend-container=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
